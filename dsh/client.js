@@ -81,7 +81,7 @@ window.__ModuleLoader__.load({
       // history window leaves it holding a single dash.
       '.dshr-rail{display:flex;flex-direction:column;align-items:center;gap:8px;padding:9px 10px;border-radius:999px;pointer-events:auto;background:rgba(127,127,127,.07);background:color-mix(in srgb,var(--dshr-dash) 9%,transparent);transition:background-color .14s ease}',
       '.dshr-rail:hover{background:rgba(127,127,127,.14);background:color-mix(in srgb,var(--dshr-dash) 20%,transparent)}',
-      '.dshr-dash{appearance:none;-webkit-appearance:none;display:block;flex:none;width:20px;min-width:20px;padding:0;margin:0;border:none;border-radius:2px;background:var(--dshr-dash);opacity:.55;cursor:pointer;transition:opacity .12s ease,background-color .12s ease,transform .12s ease}',
+      '.dshr-dash{appearance:none;-webkit-appearance:none;display:block;flex:none;width:' + DASH_WIDTH + 'px;min-width:' + DASH_WIDTH + 'px;padding:0;margin:0;border:none;border-radius:2px;background:var(--dshr-dash);opacity:.55;cursor:pointer;transition:opacity .12s ease,background-color .12s ease,transform .12s ease}',
       '.dshr-dash:hover,.dshr-dash.is-hover{opacity:.9;transform:scaleX(1.08)}',
       '.dshr-dash.is-active{background:var(--dshr-accent);opacity:1}',
       '.dshr-dash.is-empty{opacity:.3;cursor:default}',

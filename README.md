@@ -1,145 +1,119 @@
 # dsh-chat-rail
 
-A conversation rail for DeepSeek Harness, modelled on DeepSeek's web UI: a
-column of short dashes pinned to the right edge of the chat column, one per
-human message.
+DeepSeek Harness 静态 dual-face 插件：在对话区右缘提供一条 **DeepSeek 网页版风格的对话导航竖线**——每条人类消息对应一根短横线，鼠标靠近即展开可跳转的消息列表。
 
-- **Idle** — grey dashes, with the message currently in view painted brand blue.
-- **Hover or focus** — a rounded panel expands to the left listing every human
-  message of the session, the current one highlighted in the same blue.
-- **Click a dash or a row** — that message scrolls back to the top of the
-  viewport.
+![dsh-plugin](https://img.shields.io/badge/dsh-plugin-blue)
 
-The rail follows the reading column through sidebar, details-panel, composer and
-window-size changes, and never covers the text while idle.
+## 功能
 
-## Reading history further back
+- **静默态**：右侧一列灰色短横线，**当前视口中的那条为品牌蓝**；整条竖线带一层极淡的胶囊底，即使只加载出一条消息也能看出这是一个控件，且不遮挡正文；
+- **悬停 / 聚焦**：向左展开圆角面板，列出本会话全部人类消息（当前项蓝色高亮，过长文本省略号截断，悬停显示完整内容）；
+- **点击横线或列表行**：该消息滚回视口顶部；
+- **跟随布局**：侧栏收放、详情栏开关、输入框增高、窗口缩放都会自动重新测量并跟随，位置贴着正文栏右缘（用聊天视图自己发布的 `[data-chat-flow]` 锚点定位，不写死任何布局类名）；
+- **消息很多不溢出**：最小间距也放不下时按比例**抽样**，两端必留，横线永不超出聊天列；面板始终列出全部消息。
 
-The client holds a **window** of the session log, so the rail can only offer what
-is loaded — in a long session that window may hold a single human message. The
-panel therefore carries `↑ 载入更早的消息` while older history remains: clicking
-it extends the window one page, the rail gains the newly loaded dashes, and the
-conversation is moved to the newest of the messages that just arrived, so the
-load is visible instead of landing above the fold. Repeat as far back as needed.
+## 回溯更早的历史
 
-### Panel lifetime
+客户端只持有会话日志的一个**窗口**，所以竖线只能给出已载入的部分——很长的会话里这个窗口可能只剩一条人类消息。因此只要还有更早的历史，面板顶部就会带一行 `↑ 载入更早的消息`：
 
-| Action | Panel |
+- 点击一次把窗口往前扩一页，**新横线随之长出来**；
+- 由于聊天视图会刻意保持阅读锚点，新内容会落在视口上方、看着像什么都没发生，所以加载完成后会把视图滚到**刚进来的那批消息中最新的那一条**，接着原来的位置继续往更早读；
+- 面板全程常驻，可以连点，一路翻到底。
+
+### 面板生命周期
+
+| 操作 | 面板 |
 | --- | --- |
-| pointer over the rail or the panel | open |
-| pointer leaves, nothing pinned | closes after `CLOSE_DELAY_MS` |
-| any click inside the panel | **pinned** — stays open while the pointer goes anywhere, including through a load |
-| Escape, or a click outside | closes and unpins |
-| click a message row | jumps, then closes (the interaction is over) |
-| a load in flight | never closes |
-| a transient measurement miss | the last frame is kept for `GEOMETRY_GRACE_MS` instead of blinking out |
+| 指针停在竖线或面板上 | 展开 |
+| 指针离开且未钉住 | `CLOSE_DELAY_MS` 后收起 |
+| **面板内任意点击** | **钉住**——指针去哪都不收，加载全程也不收 |
+| Escape，或点击面板外部 | 收起并解除钉住 |
+| 点击某条消息 | 跳转后收起（交互结束） |
+| 加载进行中 | 永不收起 |
+| 测量瞬时失败 | 保留上一帧 `GEOMETRY_GRACE_MS`，不闪断 |
 
-## Install
+## 安装
 
 ```powershell
-node tools/install.mjs              # default profile (`web`)
+node tools/install.mjs              # 默认装进 `web` profile
 node tools/install.mjs --profile web
-node tools/install.mjs --remove     # uninstall
+node tools/install.mjs --remove     # 卸载
 ```
 
-The installer copies this package to `<profile>/node_modules/dsh-chat-rail` and
-lists it in `<profile>/package.json` (`dependencies` plus
-`dsh.profile.bundles`), keeping the rest of that file byte-identical and leaving
-`package.json.bak` behind.
+安装脚本把本包复制到 `<profile>/node_modules/dsh-chat-rail`，并在 `<profile>/package.json` 里登记（`dependencies` + `dsh.profile.bundles`），其余字节保持原样，同时留下 `package.json.bak` 备份。
 
-**Restart the harness afterwards** (`dsh web`) and reload the page: a profile's
-bundle layers are composed at boot, so a newly listed bundle mounts on the next
-start.
+**装完要重启 harness（`dsh web`）并刷新页面**：profile 的 bundle 层在启动时合成，新登记的 bundle 下次启动才挂载。之后改 `dsh/client.js` 只需刷新页面（`/plugins/...` 是每次请求从磁盘读的），不用再重启。
 
-## How it mounts
+## 架构（dual-face，无构建步骤）
 
-This is a *bundle*, not a dynamic Cordis plugin: `package.json` declares
-`dsh.bundle.patch` (a profile patch layer) and `dsh.client` (a browser half), so
-the composition itself mounts the row:
-
-```yaml
-# cordis.patch.yml — this package's layer
-- insert:
-    - id: dsh-chat-rail
-      name: 'dsh-chat-rail'
-```
-
-- `dsh/index.js` — the Host half. Deliberately inert: the feature is entirely
-  browser-side, and an entry that declares no `inject` can never leave the boot
-  sweep waiting on an unresolvable service.
-- `dsh/client.js` — the browser half. A hand-written lazy-CJS bundle
-  (`window.__ModuleLoader__.load`), the same protocol the shipped client plugins
-  and other profile bundles use; there is no build step.
-
-The Host's client-module registry scans enabled loader entries for packages
-declaring `dsh.client`, resolves `exports["./client"]`, hashes the bundle into
-`window.__DSH_BOOT__`, and serves it under `/plugins/dsh-chat-rail/client.js`.
-
-## Where the data comes from
-
-Only public client contract, no Host round trip:
-
-| Need | Source |
-| --- | --- |
-| current session | `props.useSessions` — the root-scope standard kit of `shell.overlay` |
-| messages | `ctx.get('sessions').binding(id).session` — the session face, an `ObservableSnapshot<ConversationSnapshot>` |
-| message text | the `content` blocks of `user` / `steering` chat nodes, reduced to one display line |
-| scrollport | the chat view's own structural anchors: `[data-conversation-scroll]`, `[data-chat-flow]`, `[data-chat-anchor-key]`, `[data-composer-seat]` |
-| frame layer | `[data-shell-overlay]`, the frame-wide layer the rail renders into |
-
-Only leaf scalars (a node key, a message string, rectangles) ever reach React
-state; the snapshot itself is never copied, serialized or retained.
-
-Work is kept off the streaming path: the subscription reduces each snapshot
-flush to a cheap signature, an unchanged signature skips the commit, the active
-dash is reused unless the scroll offset, flow extent, viewport box or item set
-actually moved, and at the bottom of a conversation the newest message is
-current without walking any rows.
-
-## Tuning
-
-All knobs are the constants at the top of `dsh/client.js`:
-
-| Constant | Default | Meaning |
+| 文件 | 半区 | 说明 |
 | --- | --- | --- |
-| `DASH_HEIGHT` / `DASH_GAP_MAX` / `DASH_GAP_MIN` | 3 / 9 / 3 | dash geometry |
-| `RAIL_CLEARANCE` | 40 | gap between the reading column's right edge and the rail |
-| `RAIL_EDGE_INSET` | 10 | minimum inset from the scrollport's own right edge |
-| `ACTIVE_THRESHOLD` | 32 | how far below the scrollport top still counts as "current" |
-| `JUMP_OFFSET` | 16 | breathing room above a message after a jump |
-| `CLOSE_DELAY_MS` | 160 | grace period so panel↔rail travel never flickers |
-| `GEOMETRY_GRACE_MS` | 1500 | how long a stale frame survives a transient measurement miss |
-| `DIAGNOSTIC` | `true` | report a verifiably invisible rail once per page load |
+| `dsh/index.js` | Host | ESM 插件，**故意空实现**：功能全在浏览器侧，且不声明任何 `inject`，所以这一行永远不会卡在启动扫描的 pending 上 |
+| `dsh/client.js` | Client | 手写 lazy-CJS bundle（`window.__ModuleLoader__.load`），与内置 client 插件、其他 profile bundle 同协议；挂载到 frame 级浮层 `shell.overlay`，无需批准、重启不丢失 |
+| `cordis.patch.yml` | 组合层 | 本包的 profile patch：`- insert: [{ id: dsh-chat-rail, name: dsh-chat-rail }]` |
 
-A conversation too long to fit even at `DASH_GAP_MIN` is **sampled**: the rail
-draws only the dashes that fit, spread evenly and always keeping both endpoints,
-and lays them out onto the messages they stand for. The hover panel always lists
-every message regardless.
+宿主侧的 client-module registry 会扫描已启用的 loader 条目，挑出声明了 `dsh.client` 的包，解析 `exports["./client"]`，把 bundle 哈希进 `window.__DSH_BOOT__`，并通过 `/plugins/dsh-chat-rail/client.js` 提供。
 
-Vertical placement is centred in the message viewport (the scrollport's top down
-to the composer seat), which is the one line to change in `Rail`'s root style if
-you prefer a top-anchored rail.
+## 数据来源
 
-## Tests
+只走公开客户端契约，没有 Host 往返：
+
+| 需要 | 来源 |
+| --- | --- |
+| 当前会话 | `props.useSessions`（`shell.overlay` 的 root 作用域标准 props；缺失时回退直读 `sessions.list` 快照并订阅） |
+| 消息 | `ctx.get('sessions').binding(id).session`——会话 face，即 `ObservableSnapshot<ConversationSnapshot>` |
+| 消息文本 | `user` / `steering` 节点的 `content` 块，压成一行显示文本 |
+| 滚动容器 | 聊天视图自己发布的结构锚点：`[data-conversation-scroll]`、`[data-chat-flow]`、`[data-chat-anchor-key]`、`[data-composer-seat]` |
+| 浮层 | `[data-shell-overlay]`，竖线渲染进的那个 frame 级浮层 |
+
+只有叶子标量（节点 key、消息字符串、矩形）会进入 React state；快照本身从不复制、不序列化、不长期持有。
+
+## 性能
+
+工作全部避开流式输出路径：
+
+- 订阅把每次快照 flush 归约成一个廉价签名，签名没变就不提交；
+- 只有当滚动偏移、内容高度、视口框或条目集合真的变了，才重新走一遍消息行；
+- 在会话底部时"当前项"直接取最新一条，无需遍历任何行；
+- 面板加载中不会因为布局抖动而重挂载（几何宽限期 + 状态放在组件外）。
+
+## 可调参数
+
+全部集中在 `dsh/client.js` 顶部的常量：
+
+| 常量 | 默认值 | 含义 |
+| --- | --- | --- |
+| `DASH_HEIGHT` / `DASH_WIDTH` / `DASH_GAP_MAX` / `DASH_GAP_MIN` | 4 / 20 / 9 / 3 | 横线几何 |
+| `RAIL_CLEARANCE` | 40 | 正文栏右缘到竖线的间距 |
+| `RAIL_EDGE_INSET` | 10 | 距滚动容器自身右缘的最小内缩 |
+| `ACTIVE_THRESHOLD` | 32 | 距滚动容器顶部多少像素内仍算"当前" |
+| `JUMP_OFFSET` | 16 | 跳转后消息上方的留白 |
+| `CLOSE_DELAY_MS` | 160 | 面板与竖线之间移动的防闪烁宽限 |
+| `GEOMETRY_GRACE_MS` | 1500 | 测量瞬时失败时保留旧帧的时长 |
+| `DIAGNOSTIC` | `true` | 竖线被证实不可见时，每次页面加载上报一次自检 |
+
+垂直方向默认在消息视口内**居中**（滚动容器顶部到输入框座位之间）；想改成顶对齐，改 `Rail` 根节点样式那一行即可。
+
+## 测试
 
 ```powershell
-node test/smoke.mjs      # the browser half against a synthetic DOM + a real React render
-node test/manifest.mjs   # the profile-manifest splice used by the installer
+node test/smoke.mjs      # 浏览器半区：合成 DOM + 真实 React 渲染
+node test/manifest.mjs   # 安装脚本用的 profile manifest 文本改写
 ```
 
-`test/smoke.mjs` loads the actual bundle through a stand-in
-`window.__ModuleLoader__`, then checks the snapshot reduction, the dash
-fitting/sampling math, the chat-frame measurement, the active-message
-resolution, the jump scroll, style/slot ownership under `ctx.effect`, and a full
-`react-dom/server` render of the registered component (dash count, highlight,
-placement, labels). It reads React from the installed harness so the render uses
-the browser's version.
+`test/smoke.mjs` 用替身 `window.__ModuleLoader__` 加载**真正的 bundle**，然后校验快照归约、横线排布/抽样数学、聊天取景测量、当前消息判定、跳转滚动、`ctx.effect` 下的样式与 slot 归属，以及用 `react-dom/server` 对注册组件做完整渲染（横线数量、高亮、定位、文案）。React 取自本机已安装的 harness，保证渲染用的是浏览器那一版。
 
-## Troubleshooting
+## 自检与排错
 
-| Symptom | Cause |
+`DIAGNOSTIC` 打开时，插件只在**竖线被证实不可见**（不在 DOM、尺寸为 0、跑出视口、横线透明）时才向当前会话发一条 `[dsh-chat-rail 自检]` 报告，附上实测矩形、横线计算样式、视口尺寸和各 DOM 锚点存在性；正常工作时完全静默。排查完把它设为 `false` 即可关闭。
+
+| 现象 | 原因 |
 | --- | --- |
-| No rail after install | The harness was not restarted, so the boot graph predates the bundle. |
-| Rail never appears in a session | The session has no human message yet, or the chat view is not the active view tab. |
-| `cannot resolve profile bundle` at boot | The package directory is missing from `<profile>/node_modules`. |
-| Row mounts but nothing renders | Check the browser console for a `dsh-chat-rail` error; the module loader reports a failed bundle loudly. |
+| 装完没有竖线 | 没重启 harness，启动图早于本 bundle |
+| 某个会话里始终没有竖线 | 该会话还没有人类消息，或当前视图不是"对话"页签 |
+| 启动时报 `cannot resolve profile bundle` | `<profile>/node_modules` 里缺本包目录 |
+| 行挂上了但什么都不渲染 | 看浏览器控制台有无 `dsh-chat-rail` 报错；module loader 对加载失败的 bundle 会大声报错 |
+
+## 许可
+
+MIT
