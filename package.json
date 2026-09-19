@@ -1,0 +1,50 @@
+{
+  "name": "dsh-chat-rail",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness plugin: a DeepSeek-web-style conversation rail on the right edge of the chat column — one dash per human message that expands into a jump list on hover",
+  "type": "module",
+  "exports": {
+    ".": "./dsh/index.js",
+    "./dsh": "./dsh/index.js",
+    "./package.json": "./package.json",
+    "./client": "./dsh/client.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "conversation",
+    "navigation",
+    "rail",
+    "outline"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Stellight/dsh-chat-rail.git"
+  },
+  "homepage": "https://github.com/Stellight/dsh-chat-rail#readme",
+  "bugs": {
+    "url": "https://github.com/Stellight/dsh-chat-rail/issues"
+  },
+  "files": [
+    "dsh",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

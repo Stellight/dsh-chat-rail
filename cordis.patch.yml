@@ -1,0 +1,5 @@
+# dsh bundle layer: mount the dsh-chat-rail plugin (dsh/index.js via the
+# package root export; dsh/client.js is the browser half).
+- insert:
+    - id: dsh-chat-rail
+      name: 'dsh-chat-rail'
