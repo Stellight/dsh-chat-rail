@@ -67,12 +67,17 @@ window.__ModuleLoader__.load({
     var panelHandle = null
 
     /**
-     * Temporary probe switch. While true, the first render outcome of a page
-     * load is reported once into the current session (and logged), so a rail
-     * that cannot paint explains itself instead of showing an empty right edge.
+     * Diagnostic switch, OFF by default.
+     *
+     * While true, a rail that SHOULD be on screen but is not (absent from the
+     * DOM, zero-sized, off-viewport, transparent) reports itself once per page
+     * load into the current session. It is off because that report travels as a
+     * real prompt — the only public way to reach a session — so it lands as a
+     * user message and starts an agent turn. Turn it on only while chasing an
+     * actually invisible rail.
      */
-    var DIAGNOSTIC = true
-    /** Report deadline after mount when nothing else reported first. */
+    var DIAGNOSTIC = false
+    /** Deadline after mount by which the rail should have painted. */
     var DIAGNOSTIC_DELAY_MS = 3000
 
     var CSS = [
@@ -217,6 +222,23 @@ window.__ModuleLoader__.load({
         else break
       }
       return found
+    }
+
+    /**
+     * Whether the rail has anything to paint at all.
+     *
+     * One predicate, two callers: the render uses it to decide to stay hidden,
+     * and the diagnostic probe uses it to decide whether a missing rail is a
+     * fault. An empty session (no human message, no older history to pull in)
+     * is legitimately rail-less and must never be reported.
+     * @param itemCount - human messages in the loaded window.
+     * @param more - whether older history is still unloaded.
+     * @param height - measured message-viewport height.
+     * @returns whether a rail is expected on screen.
+     */
+    function railExpected(itemCount, more, height) {
+      if (!(height >= MIN_AREA_HEIGHT)) return false
+      return itemCount > 0 || more === true
     }
 
     function sameGeometry(left, right) {
@@ -638,6 +660,8 @@ window.__ModuleLoader__.load({
         itemsRef.current = items
         var loadingRef = React.useRef(false)
         loadingRef.current = rail.loading === true
+        var moreRef = React.useRef(false)
+        moreRef.current = rail.more === true
         var closeTimer = React.useRef(0)
         var activeRow = React.useRef(null)
         var rootRef = React.useRef(null)
@@ -851,13 +875,17 @@ window.__ModuleLoader__.load({
           row.scrollIntoView({ block: 'nearest' })
         }, [open, highlightItem, items])
 
-        // (5) Probe deadline: a rail that paints somewhere invisible should say
-        // so, once per page load. Silent whenever the rail looks right — and
-        // whenever there is no chat view to hold it. Reporting lives in an
-        // effect, never in render.
+        // (5) Probe deadline: a rail that SHOULD be on screen and is not gets
+        // reported once per page load. The predicate mirrors the render above
+        // exactly — an empty session, or one whose loaded window holds no human
+        // message and no older history, legitimately paints nothing and must
+        // stay silent. Reporting lives in an effect, never in render.
         React.useEffect(function () {
           var timer = setTimeout(function () {
-            if (!domProbe().body) return
+            if (!DIAGNOSTIC) return
+            var measured = measure()
+            if (measured === null) return
+            if (!railExpected(itemsRef.current.length, moreRef.current, measured.height)) return
             var reason = railLooksWrong()
             if (reason !== null) reportDiag('invisible:' + reason, null)
           }, DIAGNOSTIC_DELAY_MS)
@@ -872,8 +900,7 @@ window.__ModuleLoader__.load({
         // them out); with older history still unloaded the rail must stay
         // reachable, so it keeps a placeholder dash to hover.
         var canLoadEarlier = rail.more === true && currentFace() !== undefined
-        if (geom === null || geom.height < MIN_AREA_HEIGHT) return null
-        if (items.length === 0 && !canLoadEarlier) return null
+        if (geom === null || !railExpected(items.length, canLoadEarlier, geom.height)) return null
 
         function labelOf(item, index) {
           return item.text === '' ? '第 ' + String(index + 1) + ' 条消息' : item.text
@@ -1050,6 +1077,7 @@ window.__ModuleLoader__.load({
       dashMapping: dashMapping,
       dashIndexOf: dashIndexOf,
       initialGeometry: initialGeometry,
+      railExpected: railExpected,
       measure: measure,
       computeActive: computeActive,
       scrollToAnchor: scrollToAnchor,

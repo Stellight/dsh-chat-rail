@@ -197,6 +197,21 @@ check('a crowded rail shrinks its gap and samples down to what fits',
 
 check('an empty conversation draws nothing', internals.dashLayout(0, 660).shown === 0)
 
+// ---- whether a rail is expected at all ------------------------------------
+//
+// One predicate guards both the render and the diagnostic probe. An empty
+// session is legitimately rail-less, and reporting it as a fault is what once
+// made the probe fire on every fresh session.
+
+check('an empty session with no older history expects no rail',
+  internals.railExpected(0, false, 660) === false)
+check('a loaded conversation expects a rail', internals.railExpected(3, false, 660) === true)
+check('a starved window with older history still expects a rail',
+  internals.railExpected(0, true, 660) === true)
+check('a viewport too short to hold a rail expects none',
+  internals.railExpected(3, false, 50) === false &&
+  internals.railExpected(3, true, 0) === false)
+
 const identity = internals.dashMapping(5, 5)
 check('an unsampled rail maps dashes one-to-one',
   identity.join(',') === '0,1,2,3,4', identity.join(','))
